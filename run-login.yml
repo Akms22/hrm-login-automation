@@ -1,0 +1,30 @@
+name: HRM Auto Login
+
+on:
+  schedule:
+    - cron: "0 9 * * *" # every day at 9:00 AM UTC
+  workflow_dispatch: # allows manual trigger
+
+jobs:
+  run-login:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install selenium webdriver-manager
+
+      - name: Run login automation
+        env:
+          HRM_USERNAME: ${{ secrets.HRM_USERNAME }}
+          HRM_PASSWORD: ${{ secrets.HRM_PASSWORD }}
+        run: |
+          python login.py
