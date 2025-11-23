@@ -3,43 +3,57 @@ import time
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 USERNAME = os.getenv("HRM_USERNAME")
 PASSWORD = os.getenv("HRM_PASSWORD")
 
-options = Options()
-options.add_argument("--headless")
-options.add_argument("--no-sandbox")
-options.add_argument("--disable-dev-shm-usage")
-options.add_argument("--window-size=1920,1080")
+print("Starting browser...")
 
-driver = webdriver.Chrome(
-    service=Service(ChromeDriverManager().install()),
-    options=options
-)
+chrome_options = Options()
+chrome_options.add_argument("--headless=new")
+chrome_options.add_argument("--no-sandbox")
+chrome_options.add_argument("--disable-dev-shm-usage")
+chrome_options.add_argument("--disable-gpu")
+chrome_options.add_argument("--window-size=1920,1080")
+
+driver = webdriver.Chrome(options=chrome_options)
 
 try:
     print("Opening website...")
-    driver.get("https://hrm.pionova.in/admin/users/login")
+    driver.get("https://hrm.org.in/login")
 
-    time.sleep(3)
+    wait = WebDriverWait(driver, 20)
 
-    print("Entering credentials...")
-    # Correct selectors from your screenshot
-    driver.find_element(By.NAME, "email").send_keys(USERNAME)
-    driver.find_element(By.NAME, "password").send_keys(PASSWORD)
+    print("Waiting for email field...")
+    email_input = wait.until(
+        EC.presence_of_element_located((By.ID, "email"))
+    )
+    email_input.clear()
+    email_input.send_keys(USERNAME)
 
-    print("Clicking login...")
-    driver.find_element(By.XPATH, "//button[contains(text(),'Login')]").click()
+    print("Entering password...")
+    password_input = wait.until(
+        EC.presence_of_element_located((By.ID, "password"))
+    )
+    password_input.clear()
+    password_input.send_keys(PASSWORD)
 
-    time.sleep(5)
+    print("Clicking login button...")
+    login_button = wait.until(
+        EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Login')]"))
+    )
+    login_button.click()
 
-    print("Saving screenshot...")
-    driver.save_screenshot("after_login.png")
+    print("Waiting for dashboard...")
+    wait.until(EC.url_contains("dashboard"))
+
+    print("SUCCESS: Logged in!")
+
+except Exception as e:
+    print("ERROR during login:", str(e))
 
 finally:
+    print("Closing browser...")
     driver.quit()
-
-print("Done.")
