@@ -1,8 +1,11 @@
 name: HRM Auto Login Test
 
 on:
-  schedule:
-    - cron: "*/1 * * * *"   # Runs every 1 minute
+  # schedule:
+  #   - cron: "*/1 * * * *"   # disabled cron trigger
+  push:
+    branches:
+      - main
   workflow_dispatch:        # Allows manual run
 
 jobs:
