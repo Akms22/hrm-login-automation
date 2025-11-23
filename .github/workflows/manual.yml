@@ -1,16 +1,14 @@
 name: HRM Auto Login Test
 
 on:
-  # schedule:
-  #   - cron: "*/1 * * * *"   # disabled cron trigger
   push:
     branches:
       - main
-  workflow_dispatch:        # Allows manual run
+  workflow_dispatch:
 
 jobs:
   run-login:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout repository
@@ -37,7 +35,13 @@ jobs:
         run: |
           python login.py
 
-      - name: Upload Screenshot
+      - name: Upload Login Debug Screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: login-page-debug
+          path: page_loaded.png
+
+      - name: Upload Punch-In Screenshot
         uses: actions/upload-artifact@v4
         with:
           name: punch-in-proof
