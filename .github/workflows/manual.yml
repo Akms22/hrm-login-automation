@@ -2,7 +2,7 @@ name: HRM Auto Login Test
 
 on:
   schedule:
-    - cron: "*/2 * * * *"   # Runs every 2 minutes
+    - cron: "*/1 * * * *"   # Runs every 1 minute
   workflow_dispatch:        # Allows manual run
 
 jobs:
@@ -11,7 +11,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-      uses: actions/checkout@v4
+        uses: actions/checkout@v4
 
       - name: Install Chrome
         run: |
