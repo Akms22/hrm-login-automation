@@ -16,7 +16,7 @@ options.add_argument("--disable-dev-shm-usage")
 options.add_argument("--window-size=1920,1080")
 
 driver = webdriver.Chrome(
-    service=Service(ChromeDriverManager().install()), 
+    service=Service(ChromeDriverManager().install()),
     options=options
 )
 
@@ -27,16 +27,17 @@ try:
     time.sleep(3)
 
     print("Entering credentials...")
-    driver.find_element(By.NAME, "username").send_keys(USERNAME)
+    # Correct selectors from your screenshot
+    driver.find_element(By.NAME, "email").send_keys(USERNAME)
     driver.find_element(By.NAME, "password").send_keys(PASSWORD)
 
-    print("Click login...")
-    driver.find_element(By.XPATH, "//button[@type='submit']").click()
+    print("Clicking login...")
+    driver.find_element(By.XPATH, "//button[contains(text(),'Login')]").click()
 
     time.sleep(5)
 
-    print("Taking screenshot...")
-    driver.save_screenshot("punch_in_screenshot.png")
+    print("Saving screenshot...")
+    driver.save_screenshot("after_login.png")
 
 finally:
     driver.quit()
