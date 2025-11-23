@@ -9,27 +9,29 @@ from selenium.webdriver.chrome.service import Service
 USERNAME = os.getenv("HRM_USERNAME")
 PASSWORD = os.getenv("HRM_PASSWORD")
 
-# Setup Chrome options
 options = Options()
 options.add_argument("--headless")
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
 options.add_argument("--window-size=1920,1080")
 
-driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+driver = webdriver.Chrome(
+    service=Service(ChromeDriverManager().install()), 
+    options=options
+)
 
 try:
     print("Opening website...")
-    driver.get("https://hrmapps.in/login")
+    driver.get("https://hrm.pionova.in/admin/users/login")
 
     time.sleep(3)
 
     print("Entering credentials...")
-    driver.find_element(By.NAME, "email").send_keys(USERNAME)
+    driver.find_element(By.NAME, "username").send_keys(USERNAME)
     driver.find_element(By.NAME, "password").send_keys(PASSWORD)
 
-    print("Clicking login...")
-    driver.find_element(By.XPATH, "//button[contains(text(),'Login')]").click()
+    print("Click login...")
+    driver.find_element(By.XPATH, "//button[@type='submit']").click()
 
     time.sleep(5)
 
@@ -39,4 +41,4 @@ try:
 finally:
     driver.quit()
 
-print("Automation completed successfully.")
+print("Done.")
