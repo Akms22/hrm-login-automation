@@ -1,9 +1,9 @@
-name: HRM Auto Login
+name: HRM Auto Login Test
 
 on:
   schedule:
-    - cron: "35 14 * * *"   # Runs daily at 8:05 PM IST
-  workflow_dispatch:
+    - cron: "*/2 * * * *"   # Runs every 2 minutes
+  workflow_dispatch:        # Allows manual run
 
 jobs:
   run-login:
@@ -11,7 +11,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+      uses: actions/checkout@v4
 
       - name: Install Chrome
         run: |
@@ -33,3 +33,9 @@ jobs:
           HRM_PASSWORD: ${{ secrets.HRM_PASSWORD }}
         run: |
           python login.py
+
+      - name: Upload Screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: punch-in-proof
+          path: punch_in_screenshot.png
