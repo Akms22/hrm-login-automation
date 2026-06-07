@@ -1,0 +1,63 @@
+name: HRM Punch Automation
+
+on:
+  schedule:
+    - cron: '30 3 * * 1-5'   # 03:30 UTC Mon–Fri → punch-in  (09:00 IST)
+    - cron: '0 13 * * 1-5'   # 13:00 UTC Mon–Fri → punch-out (18:30 IST)
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Punch mode (in / out / auto)'
+        required: false
+        default: 'auto'
+        type: choice
+        options:
+          - auto
+          - in
+          - out
+
+jobs:
+  punch:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Chromium
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y chromium-browser
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install selenium==4.21.0 webdriver-manager==4.0.1
+
+      - name: Run punch automation
+        env:
+          HRM_USERNAME: ${{ secrets.HRM_USERNAME }}
+          HRM_PASSWORD: ${{ secrets.HRM_PASSWORD }}
+          HRM_PUNCH_MODE: ${{ github.event.inputs.mode || secrets.HRM_PUNCH_MODE }}
+        run: |
+          python punch.py
+
+      - name: Upload punch screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: punch-screenshots-${{ github.run_id }}
+          retention-days: 7
+          if-no-files-found: warn
+          path: |
+            punch_in_screenshot.png
+            punch_out_screenshot.png
+            login_error.png
+            attendance_page_error.png
+            punch_button_error.png
+            punch_error.png
+            unexpected_error.png
