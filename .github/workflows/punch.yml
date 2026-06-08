@@ -22,7 +22,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2
 
       - name: Install Chromium
         run: |
@@ -30,7 +30,7 @@ jobs:
           sudo apt-get install -y chromium-browser
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v5.6.0
         with:
           python-version: "3.11"
 
@@ -43,12 +43,13 @@ jobs:
           HRM_USERNAME: ${{ secrets.HRM_USERNAME }}
           HRM_PASSWORD: ${{ secrets.HRM_PASSWORD }}
           HRM_PUNCH_MODE: ${{ github.event.inputs.mode || secrets.HRM_PUNCH_MODE }}
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
         run: |
           python punch.py
 
       - name: Upload punch screenshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4.6.2
         with:
           name: punch-screenshots-${{ github.run_id }}
           retention-days: 7
