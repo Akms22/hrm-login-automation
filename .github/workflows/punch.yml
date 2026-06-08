@@ -16,6 +16,9 @@ on:
           - in
           - out
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   punch:
     runs-on: ubuntu-24.04
@@ -43,7 +46,6 @@ jobs:
           HRM_USERNAME: ${{ secrets.HRM_USERNAME }}
           HRM_PASSWORD: ${{ secrets.HRM_PASSWORD }}
           HRM_PUNCH_MODE: ${{ github.event.inputs.mode || secrets.HRM_PUNCH_MODE }}
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
         run: |
           python punch.py
 
