@@ -25,7 +25,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 # -- Constants -----------------------------------------------------------------
 
 LOGIN_URL      = "https://hrm.pionova.in/admin/users/login"
-ATTENDANCE_URL = "https://hrm.pionova.in/admin/attendances"  # update if different
+ATTENDANCE_URL = "https://hrm.pionova.in/dashboard"  # punch buttons are on dashboard
 
 LOGIN_TIMEOUT      = 20
 ATTENDANCE_TIMEOUT = 15
@@ -252,18 +252,33 @@ def login(driver: webdriver.Chrome, username: str, password: str) -> None:
 
 def navigate_to_attendance(driver: webdriver.Chrome):
     """
-    Navigates to the attendance page and waits for the Punch_Button.
+    The punch buttons (Punch In / Punch Out) are on the dashboard itself.
+    Navigates to dashboard and waits for a punch button to appear.
     Returns the Punch_Button WebElement or raises TimeoutException.
     """
-    driver.get(ATTENDANCE_URL)
+    # Already on dashboard after login — but navigate explicitly to be safe
+    if "dashboard" not in driver.current_url:
+        driver.get(ATTENDANCE_URL)
     wait = WebDriverWait(driver, ATTENDANCE_TIMEOUT)
     try:
-        btn = wait.until(EC.visibility_of_element_located(
-            (By.XPATH, "//*[contains(@class,'punch') or contains(text(),'Punch')]")
+        # Dashboard shows either "Punch In" or "Punch Out" button
+        btn = wait.until(EC.element_to_be_clickable(
+            (By.XPATH, "//button[contains(text(),'Punch In') or contains(text(),'Punch Out')]")
         ))
+        print(f"DEBUG: found punch button with text = '{btn.text}'", flush=True)
         return btn
     except TimeoutException:
-        raise TimeoutException("Attendance page did not load — Punch_Button not found")
+        # Fallback: any element with punch-related text
+        try:
+            btn = wait.until(EC.element_to_be_clickable(
+                (By.XPATH, "//*[contains(text(),'Punch In') or contains(text(),'Punch Out')]")
+            ))
+            print(f"DEBUG: found punch element (fallback) with text = '{btn.text}'", flush=True)
+            return btn
+        except TimeoutException:
+            driver.save_screenshot("debug_attendance_page.png")
+            print(f"DEBUG: page title on attendance = {driver.title}", flush=True)
+            raise TimeoutException("Attendance page did not load — Punch_Button not found")
 
 # -- Punch state detection -----------------------------------------------------
 
