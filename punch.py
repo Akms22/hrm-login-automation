@@ -349,71 +349,70 @@ def _confirmation_detected(driver: webdriver.Chrome, original_button, punch_acti
 
 def perform_punch(driver: webdriver.Chrome, punch_button, punch_action: str) -> None:
     """
-    Clicks the punch button, handles the confirmation modal, and submits.
-    Flow:
-      1. Click Punch In / Punch Out button
-      2. Wait for modal to appear
-      3. Click the Confirm/Submit button inside the modal
-      4. Wait for modal to close as confirmation
+    Clicks the dashboard punch button, waits for the modal to appear,
+    then clicks the confirm button INSIDE the modal using JS to bypass overlays.
     """
     import time
 
     print(f"DEBUG: clicking punch button for action={punch_action}", flush=True)
-    punch_button.click()
+    # Use JS click on the dashboard button to avoid interception issues
+    driver.execute_script("arguments[0].click();", punch_button)
 
+    # Step 1: Wait for the modal (id="punch-in-modal") to be visible
     wait = WebDriverWait(driver, PUNCH_TIMEOUT)
+    try:
+        modal = wait.until(EC.visibility_of_element_located(
+            (By.ID, "punch-in-modal")
+        ))
+        print("DEBUG: modal is visible", flush=True)
+        driver.save_screenshot("debug_modal_open.png")
+    except TimeoutException:
+        driver.save_screenshot("debug_no_modal.png")
+        raise RuntimeError(f"Punch modal did not open for action '{punch_action}'")
 
-    # Step 1: Wait for the modal to appear
-    # The modal contains a Confirm/Submit button (orange) at the bottom
+    # Step 2: Find the confirm button INSIDE the modal only
+    # The modal has an orange "Punch In" or "Punch Out" button at the bottom
     confirm_btn = None
-    confirm_selectors = [
-        # Orange submit button at bottom of modal — try text-based first
-        (By.XPATH, "//button[contains(text(),'Confirm')]"),
-        (By.XPATH, "//button[contains(text(),'Submit')]"),
-        (By.XPATH, "//button[contains(text(),'Punch In')]"),
-        (By.XPATH, "//button[contains(text(),'Punch Out')]"),
-        # Generic: any orange/primary button inside a modal/dialog
-        (By.CSS_SELECTOR, ".modal button[type='submit']"),
-        (By.CSS_SELECTOR, "dialog button[type='submit']"),
-        (By.XPATH, "//div[contains(@class,'modal')]//button[@type='submit']"),
-        # Last resort: any submit button that appeared after clicking
-        (By.XPATH, "//button[@type='submit' and not(contains(@class,'cancel'))]"),
+    modal_confirm_selectors = [
+        (By.CSS_SELECTOR, "#punch-in-modal button.btn-warning"),
+        (By.CSS_SELECTOR, "#punch-in-modal button.btn-danger"),
+        (By.CSS_SELECTOR, "#punch-in-modal button[type='submit']"),
+        (By.XPATH, "//div[@id='punch-in-modal']//button[contains(@class,'btn-warning') or contains(@class,'btn-danger')]"),
+        (By.XPATH, "//div[@id='punch-in-modal']//button[not(contains(text(),'Cancel'))]"),
     ]
 
-    for locator in confirm_selectors:
+    for locator in modal_confirm_selectors:
         try:
-            confirm_btn = WebDriverWait(driver, 8).until(
-                EC.element_to_be_clickable(locator)
+            confirm_btn = WebDriverWait(driver, 5).until(
+                EC.presence_of_element_located(locator)
             )
-            print(f"DEBUG: found confirm button with locator {locator}, text='{confirm_btn.text}'", flush=True)
+            print(f"DEBUG: found modal confirm button: locator={locator}, text='{confirm_btn.text}'", flush=True)
             break
         except TimeoutException:
             continue
 
     if confirm_btn is None:
-        # Take screenshot to see what modal looks like
-        driver.save_screenshot("debug_modal.png")
-        print(f"DEBUG: modal page source = {driver.page_source[:3000]}", flush=True)
-        raise RuntimeError(f"Punch modal confirm button not found for action '{punch_action}'")
+        driver.save_screenshot("debug_no_confirm_btn.png")
+        print(f"DEBUG: modal HTML = {modal.get_attribute('outerHTML')[:2000]}", flush=True)
+        raise RuntimeError(f"Confirm button not found inside punch modal for action '{punch_action}'")
 
-    # Step 2: Click the confirm button
-    driver.save_screenshot("debug_before_confirm.png")
-    confirm_btn.click()
-    print("DEBUG: clicked confirm button", flush=True)
+    # Step 3: Click via JavaScript to bypass any overlay interception
+    driver.execute_script("arguments[0].click();", confirm_btn)
+    print("DEBUG: JS-clicked modal confirm button", flush=True)
 
-    # Step 3: Wait for modal to close (confirm button disappears)
+    # Step 4: Wait for modal to close
     try:
         WebDriverWait(driver, PUNCH_TIMEOUT).until(
-            EC.invisibility_of_element(confirm_btn)
+            EC.invisibility_of_element_located((By.ID, "punch-in-modal"))
         )
         print("DEBUG: modal closed — punch confirmed", flush=True)
+        driver.save_screenshot("debug_punch_confirmed.png")
     except TimeoutException:
-        # Modal might have closed and DOM element gone — check URL/page state
+        # Give it a moment then check if still on dashboard
         time.sleep(2)
         driver.save_screenshot("debug_after_confirm.png")
-        # If we're still on dashboard, consider it success
         if "dashboard" in driver.current_url:
-            print("DEBUG: still on dashboard after confirm — treating as success", flush=True)
+            print("DEBUG: on dashboard after confirm — treating as success", flush=True)
         else:
             raise RuntimeError(
                 f"Punch action '{punch_action}' not confirmed after {PUNCH_TIMEOUT} seconds"
