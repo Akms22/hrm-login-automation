@@ -152,15 +152,58 @@ def login(driver: webdriver.Chrome, username: str, password: str) -> None:
     Raises RuntimeError if dashboard is not reached.
     """
     driver.get(LOGIN_URL)
+    # Debug: capture page immediately after load
+    driver.save_screenshot("debug_01_page_loaded.png")
+    print(f"DEBUG: current URL after get = {driver.current_url}", flush=True)
+    print(f"DEBUG: page title = {driver.title}", flush=True)
+
     wait = WebDriverWait(driver, LOGIN_TIMEOUT)
-    wait.until(EC.presence_of_element_located((By.ID, "email"))).send_keys(username)
-    wait.until(EC.presence_of_element_located((By.ID, "password"))).send_keys(password)
-    wait.until(
-        EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Login')]"))
-    ).click()
+
+    # Try finding email field — log what we find
+    try:
+        email_field = wait.until(EC.presence_of_element_located((By.ID, "email")))
+        print("DEBUG: found email field by ID='email'", flush=True)
+    except TimeoutException:
+        # Fallback: try by name or type
+        print("DEBUG: email field not found by ID='email', trying alternatives", flush=True)
+        driver.save_screenshot("debug_02_no_email_field.png")
+        print(f"DEBUG: page source snippet = {driver.page_source[:2000]}", flush=True)
+        raise RuntimeError("Login failed — email field not found")
+
+    email_field.clear()
+    email_field.send_keys(username)
+
+    try:
+        pwd_field = wait.until(EC.presence_of_element_located((By.ID, "password")))
+        print("DEBUG: found password field by ID='password'", flush=True)
+    except TimeoutException:
+        print("DEBUG: password field not found by ID='password'", flush=True)
+        driver.save_screenshot("debug_03_no_password_field.png")
+        raise RuntimeError("Login failed — password field not found")
+
+    pwd_field.clear()
+    pwd_field.send_keys(password)
+
+    try:
+        btn = wait.until(
+            EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Login')]"))
+        )
+        print("DEBUG: found Login button", flush=True)
+        driver.save_screenshot("debug_04_before_click.png")
+        btn.click()
+        print("DEBUG: clicked Login button", flush=True)
+    except TimeoutException:
+        print("DEBUG: Login button not found", flush=True)
+        driver.save_screenshot("debug_05_no_login_button.png")
+        raise RuntimeError("Login failed — Login button not found")
+
     try:
         wait.until(EC.url_contains("dashboard"))
+        print(f"DEBUG: reached dashboard, URL = {driver.current_url}", flush=True)
     except TimeoutException:
+        driver.save_screenshot("debug_06_after_click.png")
+        print(f"DEBUG: URL after click = {driver.current_url}", flush=True)
+        print(f"DEBUG: page source after click = {driver.page_source[:3000]}", flush=True)
         raise RuntimeError("Login failed — dashboard URL not reached")
 
 # -- Attendance navigation -----------------------------------------------------

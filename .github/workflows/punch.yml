@@ -72,3 +72,4 @@ jobs:
             punch_button_error.png
             punch_error.png
             unexpected_error.png
+            debug_*.png
