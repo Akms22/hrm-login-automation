@@ -2,11 +2,12 @@ name: HRM Punch Automation
 
 on:
   schedule:
-    # Fix 6: IST = UTC+5:30
-    # 9:00 AM IST = 3:30 AM UTC → punch-in
-    - cron: '30 3 * * 1-5'
-    # 6:00 PM IST = 12:30 PM UTC → punch-out
-    - cron: '30 12 * * 1-5'
+    # Punch-in window: 8:00 AM – 9:30 AM IST = 2:30 AM – 4:00 AM UTC
+    # Trigger at 2:30 AM UTC; script adds random delay of 0–90 mins
+    - cron: '30 2 * * 1-5'
+    # Punch-out window: 6:30 PM – 7:30 PM IST = 1:00 PM – 2:00 PM UTC
+    # Trigger at 1:00 PM UTC; script adds random delay of 0–60 mins
+    - cron: '0 13 * * 1-5'
   # Fix 7: manual trigger from GitHub UI
   workflow_dispatch:
     inputs:

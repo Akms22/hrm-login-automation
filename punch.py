@@ -5,8 +5,10 @@ Automates punch-in/punch-out on https://hrm.org.in/attendance
 import argparse
 import os
 import sys
+import random
+import time as time_module
 # Fix 1: removed unused 'import re'
-from datetime import datetime
+from datetime import datetime, timedelta
 # Fix 2: use typing module for Python 3.9 compatibility (no X | None syntax)
 from typing import Optional, List
 # Fix 3: zoneinfo for IST-aware time (GitHub runners use UTC)
@@ -122,7 +124,43 @@ def resolve_punch_action(mode: str, current_hour: Optional[int] = None) -> str:
     hour = current_hour if current_hour is not None else datetime.now(tz=IST).hour
     return PUNCH_IN if hour < 12 else PUNCH_OUT
 
-# -- Browser setup -------------------------------------------------------------
+# -- Random delay --------------------------------------------------------------
+
+def apply_random_delay(mode: str, punch_action: str) -> None:
+    """
+    Waits a random amount of time to make punch times look natural.
+    Only applies when running in 'auto' mode (scheduled runs).
+    Manual 'in'/'out' mode runs immediately with no delay.
+
+    Punch-in  (auto): random 0–90 minutes  → lands 8:00–9:30 AM IST
+    Punch-out (auto): random 0–60 minutes  → lands 6:30–7:30 PM IST
+    """
+    if mode != "auto":
+        print(f"[{datetime.now(tz=IST).isoformat(timespec='seconds')}] "
+              f"Manual mode '{mode}' — no random delay applied.")
+        return
+
+    if punch_action == PUNCH_IN:
+        delay_minutes = random.randint(0, 90)
+    else:
+        delay_minutes = random.randint(0, 60)
+
+    delay_seconds = delay_minutes * 60
+    target_time = datetime.now(tz=IST) + timedelta(seconds=delay_seconds)
+    print(
+        f"[{datetime.now(tz=IST).isoformat(timespec='seconds')}] "
+        f"Random delay: {delay_minutes} minutes. "
+        f"Will punch at approximately {target_time.strftime('%I:%M %p IST')}",
+        flush=True
+    )
+    time_module.sleep(delay_seconds)
+    print(
+        f"[{datetime.now(tz=IST).isoformat(timespec='seconds')}] "
+        f"Delay complete. Proceeding with {punch_action}.",
+        flush=True
+    )
+
+
 
 def create_driver() -> webdriver.Chrome:
     """
@@ -428,6 +466,9 @@ def main() -> None:
     validate_credentials(username, password)
     mode         = parse_mode()
     punch_action = resolve_punch_action(mode)
+
+    # Apply random delay to spread punches across the configured window
+    apply_random_delay(mode, punch_action)
 
     driver = None
     try:
