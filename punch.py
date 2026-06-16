@@ -5,14 +5,22 @@ Automates punch-in/punch-out on https://hrm.org.in/attendance
 import argparse
 import os
 import sys
-import re
+# Fix 1: removed unused 'import re'
 from datetime import datetime
+# Fix 2: use typing module for Python 3.9 compatibility (no X | None syntax)
+from typing import Optional, List
+# Fix 3: zoneinfo for IST-aware time (GitHub runners use UTC)
+from zoneinfo import ZoneInfo
+
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+# Fix 6: use webdriver-manager to auto-match ChromeDriver version
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
+from webdriver_manager.chrome import ChromeDriverManager
 
 # -- Constants -----------------------------------------------------------------
 
@@ -32,9 +40,12 @@ PUNCH_OUT = "punch-out"
 STATE_PUNCHED_IN  = "punched-in"
 STATE_PUNCHED_OUT = "punched-out"
 
+# Fix 3: IST timezone for correct auto-mode punch decision on CI runners
+IST = ZoneInfo("Asia/Kolkata")
+
 # -- Logging -------------------------------------------------------------------
 
-def log_step(step_name: str, event: str, dt: datetime | None = None) -> None:
+def log_step(step_name: str, event: str, dt: Optional[datetime] = None) -> None:
     """
     Prints: [<ISO-8601 timestamp>] STEP <event>: <step_name>
     dt defaults to datetime.now() when None.
@@ -50,7 +61,8 @@ def save_screenshot(driver, filename: str) -> None:
     Silently logs to stderr if screenshot fails (never re-raises).
     """
     try:
-        driver.get_screenshot_as_file(filename)
+        if driver:
+            driver.get_screenshot_as_file(filename)
     except Exception as ex:
         print(f"WARNING: Could not save screenshot '{filename}': {ex}", file=sys.stderr)
 
@@ -66,10 +78,9 @@ def get_screenshot_filename(punch_action: str) -> str:
 
 # -- Credential validation -----------------------------------------------------
 
-def validate_credentials(username: str | None, password: str | None) -> None:
+def validate_credentials(username: Optional[str], password: Optional[str]) -> None:
     """
-    Raises SystemExit(1) with an error message if credentials are missing or blank.
-    Checks: None, empty string "", or whitespace-only strings like "  " or "\t\n"
+    Raises SystemExit(1) if credentials are missing or blank.
     """
     if not (username and username.strip()) or not (password and password.strip()):
         print("ERROR: HRM_USERNAME and HRM_PASSWORD must be set", file=sys.stderr)
@@ -77,12 +88,10 @@ def validate_credentials(username: str | None, password: str | None) -> None:
 
 # -- Mode resolution -----------------------------------------------------------
 
-def parse_mode(argv: list[str] | None = None) -> str:
+def parse_mode(argv: Optional[List[str]] = None) -> str:
     """
-    Returns the resolved, lowercased punch mode: 'in', 'out', or 'auto'.
+    Returns resolved punch mode: 'in', 'out', or 'auto'.
     CLI --mode takes precedence over HRM_PUNCH_MODE env var.
-    Prints a WARNING to stderr if mode was absent (defaulted to auto).
-    Raises SystemExit(1) if mode is invalid.
     """
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--mode", default=None)
@@ -99,38 +108,40 @@ def parse_mode(argv: list[str] | None = None) -> str:
         sys.exit(1)
     return normalized
 
-def resolve_punch_action(mode: str, current_hour: int | None = None) -> str:
+def resolve_punch_action(mode: str, current_hour: Optional[int] = None) -> str:
     """
     mode: 'in' | 'out' | 'auto'
-    current_hour: 0-23 (injectable for testing; defaults to datetime.now().hour)
-    Returns: 'punch-in' | 'punch-out'
+    current_hour: 0-23 injectable for testing.
+    Fix 3: defaults to IST hour (not UTC) so auto-mode is correct on CI.
     """
     if mode == "in":
         return PUNCH_IN
     if mode == "out":
         return PUNCH_OUT
-    # auto mode
-    hour = current_hour if current_hour is not None else datetime.now().hour
+    # auto mode — use IST to determine punch direction
+    hour = current_hour if current_hour is not None else datetime.now(tz=IST).hour
     return PUNCH_IN if hour < 12 else PUNCH_OUT
 
 # -- Browser setup -------------------------------------------------------------
 
 def create_driver() -> webdriver.Chrome:
     """
-    Returns a configured Chrome WebDriver with headless flags.
-    Flags: --headless=new, --no-sandbox, --disable-dev-shm-usage,
-           --disable-gpu, --window-size=1920,1080
+    Returns a configured headless Chrome WebDriver.
+    Fix 5: all required CI flags set.
+    Fix 6: webdriver-manager auto-matches ChromeDriver to installed Chrome.
     """
     opts = Options()
     for flag in [
-        "--headless=new",
-        "--no-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
+        "--headless=new",        # Fix 5: headless mode
+        "--no-sandbox",          # Fix 5: required in CI
+        "--disable-dev-shm-usage",  # Fix 5: prevents shared memory errors
+        "--disable-gpu",         # Fix 5: no GPU in CI
         "--window-size=1920,1080",
     ]:
         opts.add_argument(flag)
-    return webdriver.Chrome(options=opts)
+    # Fix 6: auto-match ChromeDriver version via webdriver-manager
+    service = Service(ChromeDriverManager().install())
+    return webdriver.Chrome(service=service, options=opts)
 
 # -- Login ---------------------------------------------------------------------
 
@@ -156,10 +167,8 @@ def login(driver: webdriver.Chrome, username: str, password: str) -> None:
 
 def navigate_to_attendance(driver: webdriver.Chrome):
     """
-    Navigates to https://hrm.org.in/attendance.
-    Waits up to 15s for the Punch_Button to be visible.
-    Returns the Punch_Button WebElement.
-    Raises TimeoutException if not found.
+    Navigates to the attendance page and waits for the Punch_Button.
+    Returns the Punch_Button WebElement or raises TimeoutException.
     """
     driver.get(ATTENDANCE_URL)
     wait = WebDriverWait(driver, ATTENDANCE_TIMEOUT)
@@ -175,13 +184,13 @@ def navigate_to_attendance(driver: webdriver.Chrome):
 
 def detect_punch_state(punch_button, driver: webdriver.Chrome) -> str:
     """
-    Reads the Punch_Button text label.
-    'Punch In' text  -> returns 'punched-out'  (not yet punched in)
-    'Punch Out' text -> returns 'punched-in'   (already punched in)
-    Raises RuntimeError if neither label is found.
+    Reads the Punch_Button text label to determine current state.
+    Fix 4: replaced EC.element_to_be_clickable(element) with lambda
+    (passing a WebElement directly to EC is fragile).
     """
     wait = WebDriverWait(driver, STATE_TIMEOUT)
-    wait.until(EC.element_to_be_clickable(punch_button))
+    # Fix 4: wait until button is both visible and enabled
+    wait.until(lambda d: punch_button.is_displayed() and punch_button.is_enabled())
     text = punch_button.text.strip().lower()
     if "punch in" in text:
         return STATE_PUNCHED_OUT
@@ -191,12 +200,7 @@ def detect_punch_state(punch_button, driver: webdriver.Chrome) -> str:
 
 
 def is_duplicate_action(punch_state: str, punch_action: str) -> bool:
-    """
-    Returns True if punch_action would be a duplicate given punch_state.
-    ('punched-in', 'punch-in')   -> True
-    ('punched-out', 'punch-out') -> True
-    All other combos             -> False
-    """
+    """Returns True if the action would be a no-op duplicate."""
     return (
         (punch_state == STATE_PUNCHED_IN  and punch_action == PUNCH_IN) or
         (punch_state == STATE_PUNCHED_OUT and punch_action == PUNCH_OUT)
@@ -205,16 +209,14 @@ def is_duplicate_action(punch_state: str, punch_action: str) -> bool:
 # -- Punch action --------------------------------------------------------------
 
 def _confirmation_detected(driver: webdriver.Chrome, original_button, punch_action: str) -> bool:
-    """Returns True when any confirmation indicator is present after a punch action."""
+    """Returns True when any post-punch confirmation indicator is visible."""
     try:
-        # Check 1: success/toast/alert message is visible
         success_els = driver.find_elements(
             By.XPATH,
             "//*[contains(@class,'success') or contains(@class,'toast') or contains(@class,'alert')]"
         )
         if any(el.is_displayed() for el in success_els):
             return True
-        # Check 2: button text changed to reflect the new opposite state
         new_text = original_button.text.strip().lower()
         if punch_action == PUNCH_IN and "punch out" in new_text:
             return True
@@ -226,11 +228,7 @@ def _confirmation_detected(driver: webdriver.Chrome, original_button, punch_acti
 
 
 def perform_punch(driver: webdriver.Chrome, punch_button, punch_action: str) -> None:
-    """
-    Clicks Punch_Button, waits up to 10s for confirmation.
-    Confirmation: success message visible, OR button text changes, OR page update.
-    Raises RuntimeError if not confirmed within 10s.
-    """
+    """Clicks the punch button and waits up to 10s for confirmation."""
     punch_button.click()
     wait = WebDriverWait(driver, PUNCH_TIMEOUT)
     try:
@@ -297,7 +295,7 @@ def main() -> None:
             sys.exit(1)
         log_step("punch action", "END")
 
-        ts = datetime.now().isoformat(timespec="seconds")
+        ts = datetime.now(tz=IST).isoformat(timespec="seconds")
         print(f"SUCCESS: {punch_action} recorded at {ts}")
         save_screenshot(driver, get_screenshot_filename(punch_action))
 
