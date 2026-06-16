@@ -126,22 +126,34 @@ def resolve_punch_action(mode: str, current_hour: Optional[int] = None) -> str:
 
 def create_driver() -> webdriver.Chrome:
     """
-    Returns a configured headless Chrome WebDriver.
-    Fix 5: all required CI flags set.
-    Fix 6: webdriver-manager auto-matches ChromeDriver to installed Chrome.
+    Returns a configured Chrome WebDriver that avoids bot detection.
+    Uses undetected-chromedriver techniques via standard selenium options.
     """
     opts = Options()
-    for flag in [
-        "--headless=new",        # Fix 5: headless mode
-        "--no-sandbox",          # Fix 5: required in CI
-        "--disable-dev-shm-usage",  # Fix 5: prevents shared memory errors
-        "--disable-gpu",         # Fix 5: no GPU in CI
-        "--window-size=1920,1080",
-    ]:
-        opts.add_argument(flag)
-    # Fix 6: auto-match ChromeDriver version via webdriver-manager
+    # Use the new headless mode
+    opts.add_argument("--headless=new")
+    opts.add_argument("--no-sandbox")
+    opts.add_argument("--disable-dev-shm-usage")
+    opts.add_argument("--disable-gpu")
+    opts.add_argument("--window-size=1920,1080")
+    # Anti-bot-detection flags
+    opts.add_argument("--disable-blink-features=AutomationControlled")
+    opts.add_experimental_option("excludeSwitches", ["enable-automation"])
+    opts.add_experimental_option("useAutomationExtension", False)
+    # Realistic user agent
+    opts.add_argument(
+        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/125.0.0.0 Safari/537.36"
+    )
     service = Service(ChromeDriverManager().install())
-    return webdriver.Chrome(service=service, options=opts)
+    driver = webdriver.Chrome(service=service, options=opts)
+    # Mask webdriver property via CDP
+    driver.execute_cdp_cmd(
+        "Page.addScriptToEvaluateOnNewDocument",
+        {"source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"}
+    )
+    return driver
 
 # -- Login ---------------------------------------------------------------------
 
@@ -152,6 +164,9 @@ def login(driver: webdriver.Chrome, username: str, password: str) -> None:
     Raises RuntimeError if login fails.
     """
     driver.get(LOGIN_URL)
+    # Wait for page to fully render (helps bypass bot checks)
+    import time
+    time.sleep(3)
     driver.save_screenshot("debug_01_page_loaded.png")
     print(f"DEBUG: current URL after get = {driver.current_url}", flush=True)
     print(f"DEBUG: page title = {driver.title}", flush=True)
