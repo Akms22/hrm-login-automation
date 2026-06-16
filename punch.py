@@ -24,8 +24,8 @@ from webdriver_manager.chrome import ChromeDriverManager
 
 # -- Constants -----------------------------------------------------------------
 
-LOGIN_URL      = "https://hrm.org.in/login"
-ATTENDANCE_URL = "https://hrm.org.in/attendance"
+LOGIN_URL      = "https://hrm.pionova.in/admin/users/login"
+ATTENDANCE_URL = "https://hrm.pionova.in/admin/attendances"  # update if different
 
 LOGIN_TIMEOUT      = 20
 ATTENDANCE_TIMEOUT = 15
@@ -147,63 +147,105 @@ def create_driver() -> webdriver.Chrome:
 
 def login(driver: webdriver.Chrome, username: str, password: str) -> None:
     """
-    Authenticates against https://hrm.org.in/login.
-    Waits up to 20s for dashboard URL.
-    Raises RuntimeError if dashboard is not reached.
+    Authenticates against the HRM portal login page.
+    Tries multiple selector strategies for email/password fields.
+    Raises RuntimeError if login fails.
     """
     driver.get(LOGIN_URL)
-    # Debug: capture page immediately after load
     driver.save_screenshot("debug_01_page_loaded.png")
     print(f"DEBUG: current URL after get = {driver.current_url}", flush=True)
     print(f"DEBUG: page title = {driver.title}", flush=True)
 
     wait = WebDriverWait(driver, LOGIN_TIMEOUT)
 
-    # Try finding email field — log what we find
-    try:
-        email_field = wait.until(EC.presence_of_element_located((By.ID, "email")))
-        print("DEBUG: found email field by ID='email'", flush=True)
-    except TimeoutException:
-        # Fallback: try by name or type
-        print("DEBUG: email field not found by ID='email', trying alternatives", flush=True)
+    # Try multiple selectors for email field
+    email_field = None
+    for locator in [
+        (By.ID, "email"),
+        (By.NAME, "email"),
+        (By.CSS_SELECTOR, "input[type='email']"),
+        (By.CSS_SELECTOR, "input[placeholder*='mail' i]"),
+        (By.CSS_SELECTOR, "input[placeholder*='Email' i]"),
+        (By.XPATH, "//input[@type='email' or @name='email' or contains(@placeholder,'mail')]"),
+    ]:
+        try:
+            email_field = WebDriverWait(driver, 5).until(
+                EC.presence_of_element_located(locator)
+            )
+            print(f"DEBUG: found email field with locator {locator}", flush=True)
+            break
+        except TimeoutException:
+            continue
+
+    if email_field is None:
         driver.save_screenshot("debug_02_no_email_field.png")
-        print(f"DEBUG: page source snippet = {driver.page_source[:2000]}", flush=True)
+        print(f"DEBUG: page source = {driver.page_source[:3000]}", flush=True)
         raise RuntimeError("Login failed — email field not found")
 
     email_field.clear()
     email_field.send_keys(username)
 
-    try:
-        pwd_field = wait.until(EC.presence_of_element_located((By.ID, "password")))
-        print("DEBUG: found password field by ID='password'", flush=True)
-    except TimeoutException:
-        print("DEBUG: password field not found by ID='password'", flush=True)
+    # Try multiple selectors for password field
+    pwd_field = None
+    for locator in [
+        (By.ID, "password"),
+        (By.NAME, "password"),
+        (By.CSS_SELECTOR, "input[type='password']"),
+    ]:
+        try:
+            pwd_field = WebDriverWait(driver, 5).until(
+                EC.presence_of_element_located(locator)
+            )
+            print(f"DEBUG: found password field with locator {locator}", flush=True)
+            break
+        except TimeoutException:
+            continue
+
+    if pwd_field is None:
         driver.save_screenshot("debug_03_no_password_field.png")
         raise RuntimeError("Login failed — password field not found")
 
     pwd_field.clear()
     pwd_field.send_keys(password)
 
-    try:
-        btn = wait.until(
-            EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Login')]"))
-        )
-        print("DEBUG: found Login button", flush=True)
-        driver.save_screenshot("debug_04_before_click.png")
-        btn.click()
-        print("DEBUG: clicked Login button", flush=True)
-    except TimeoutException:
-        print("DEBUG: Login button not found", flush=True)
-        driver.save_screenshot("debug_05_no_login_button.png")
-        raise RuntimeError("Login failed — Login button not found")
+    # Try multiple selectors for login button
+    login_btn = None
+    for locator in [
+        (By.XPATH, "//button[contains(text(),'Login')]"),
+        (By.XPATH, "//input[@type='submit']"),
+        (By.CSS_SELECTOR, "button[type='submit']"),
+        (By.XPATH, "//button[@type='submit']"),
+    ]:
+        try:
+            login_btn = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable(locator)
+            )
+            print(f"DEBUG: found login button with locator {locator}", flush=True)
+            break
+        except TimeoutException:
+            continue
 
+    if login_btn is None:
+        driver.save_screenshot("debug_04_no_login_button.png")
+        raise RuntimeError("Login failed — login button not found")
+
+    driver.save_screenshot("debug_05_before_click.png")
+    login_btn.click()
+    print("DEBUG: clicked login button", flush=True)
+
+    # Wait for dashboard — try multiple URL patterns
     try:
-        wait.until(EC.url_contains("dashboard"))
-        print(f"DEBUG: reached dashboard, URL = {driver.current_url}", flush=True)
+        WebDriverWait(driver, LOGIN_TIMEOUT).until(
+            lambda d: "dashboard" in d.current_url or
+                      "attendance" in d.current_url or
+                      "/admin" in d.current_url and "login" not in d.current_url
+        )
+        print(f"DEBUG: post-login URL = {driver.current_url}", flush=True)
+        driver.save_screenshot("debug_06_after_login.png")
     except TimeoutException:
-        driver.save_screenshot("debug_06_after_click.png")
-        print(f"DEBUG: URL after click = {driver.current_url}", flush=True)
-        print(f"DEBUG: page source after click = {driver.page_source[:3000]}", flush=True)
+        driver.save_screenshot("debug_07_login_timeout.png")
+        print(f"DEBUG: URL after timeout = {driver.current_url}", flush=True)
+        print(f"DEBUG: page source after click = {driver.page_source[:2000]}", flush=True)
         raise RuntimeError("Login failed — dashboard URL not reached")
 
 # -- Attendance navigation -----------------------------------------------------
