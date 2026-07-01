@@ -5,6 +5,7 @@ Automates punch-in/punch-out on https://hrm.org.in/attendance
 import argparse
 import os
 import sys
+import time
 # Fix 1: removed unused 'import re'
 from datetime import datetime
 # Fix 2: use typing module for Python 3.9 compatibility (no X | None syntax)
@@ -123,14 +124,7 @@ def resolve_punch_action(mode: str, current_hour: Optional[int] = None) -> str:
     return PUNCH_IN if hour < 12 else PUNCH_OUT
 
 # -- Random delay --------------------------------------------------------------
-
-def apply_random_delay(mode: str, punch_action: str) -> None:
-    """
-    Random delay removed — GitHub Actions cron drift (15–60 min) provides
-    natural timing variation. Punches execute immediately after cron fires.
-    """
-    ts = datetime.now(tz=IST).isoformat(timespec="seconds")
-    print(f"[{ts}] Proceeding with {punch_action} immediately (no delay).", flush=True)
+# Removed — GitHub cron drift provides natural timing variation.
 
 
 
@@ -180,7 +174,6 @@ def login(driver: webdriver.Chrome, username: str, password: str) -> None:
     """
     driver.get(LOGIN_URL)
     # Wait for page to fully render (helps bypass bot checks)
-    import time
     time.sleep(3)
     driver.save_screenshot("debug_01_page_loaded.png")
     print(f"DEBUG: current URL after get = {driver.current_url}", flush=True)
@@ -362,8 +355,6 @@ def perform_punch(driver: webdriver.Chrome, punch_button, punch_action: str) -> 
     Clicks the dashboard punch button, waits for the modal to appear,
     then clicks the confirm button INSIDE the modal using JS to bypass overlays.
     """
-    import time
-
     print(f"DEBUG: clicking punch button for action={punch_action}", flush=True)
     # Use JS click on the dashboard button to avoid interception issues
     driver.execute_script("arguments[0].click();", punch_button)
@@ -439,8 +430,8 @@ def main() -> None:
     mode         = parse_mode()
     punch_action = resolve_punch_action(mode)
 
-    # Apply random delay to spread punches across the configured window
-    apply_random_delay(mode, punch_action)
+    ts = datetime.now(tz=IST).isoformat(timespec="seconds")
+    print(f"[{ts}] Mode={mode}, Action={punch_action}", flush=True)
 
     driver = None
     try:

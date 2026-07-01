@@ -2,21 +2,20 @@ name: HRM Punch Automation
 
 on:
   schedule:
-    # Punch-in: 2:00 AM UTC = 7:30 AM IST (Mon–Fri)
-    # GitHub cron drift adds natural randomness of 15–60 mins
+    # Punch-IN: 2:00 AM UTC = 7:30 AM IST (Mon–Fri)
+    # HRM_PUNCH_MODE is hardcoded to 'in' — no auto-mode guessing
     - cron: '0 2 * * 1-5'
-    # Punch-out: 10:30 AM UTC = 4:00 PM IST (Mon–Fri)
+    # Punch-OUT: 10:30 AM UTC = 4:00 PM IST (Mon–Fri)
+    # HRM_PUNCH_MODE is hardcoded to 'out' — no auto-mode guessing
     - cron: '30 10 * * 1-5'
-  # Fix 7: manual trigger from GitHub UI
   workflow_dispatch:
     inputs:
       mode:
-        description: 'Punch mode (in / out / auto)'
+        description: 'Punch mode'
         required: false
-        default: 'auto'
+        default: 'in'
         type: choice
         options:
-          - auto
           - in
           - out
 
@@ -28,33 +27,45 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-      # Fix 1: pinned to latest v4 compatible with Node.js 24
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Fix 3: install google-chrome-stable (more reliable than chromium-browser)
       - name: Install Chrome
         run: |
           sudo apt-get update
           sudo apt-get install -y google-chrome-stable
 
-      # Fix 2: Python 3.11
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      # Fix 4: install from requirements.txt
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      # Fix 5: pass secrets as env vars
+      - name: Determine punch mode from cron schedule
+        id: punchmode
+        run: |
+          # If manually triggered, use the input
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "mode=${{ github.event.inputs.mode }}" >> $GITHUB_OUTPUT
+          else
+            # Determine mode from current UTC hour
+            HOUR=$(date -u +%H)
+            if [ "$HOUR" -lt 12 ]; then
+              echo "mode=in" >> $GITHUB_OUTPUT
+            else
+              echo "mode=out" >> $GITHUB_OUTPUT
+            fi
+          fi
+
       - name: Run punch automation
         env:
           HRM_USERNAME: ${{ secrets.HRM_USERNAME }}
           HRM_PASSWORD: ${{ secrets.HRM_PASSWORD }}
-          HRM_PUNCH_MODE: ${{ github.event.inputs.mode || secrets.HRM_PUNCH_MODE }}
+          HRM_PUNCH_MODE: ${{ steps.punchmode.outputs.mode }}
         run: |
+          echo "Running with mode: $HRM_PUNCH_MODE"
           python punch.py
 
       - name: Upload punch screenshots
