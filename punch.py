@@ -466,6 +466,28 @@ def main() -> None:
             sys.exit(1)
         log_step("punch state detection", "END")
 
+        # Special case: if we want to punch-in but already punched-in,
+        # punch out first then punch in again (reset for new day)
+        if punch_action == PUNCH_IN and punch_state == STATE_PUNCHED_IN:
+            print("INFO: Already punched-in — punching out first, then punching in", flush=True)
+            log_step("punch action (reset punch-out)", "START")
+            try:
+                perform_punch(driver, punch_button, PUNCH_OUT)
+            except RuntimeError as e:
+                print(f"ERROR: {e}", file=sys.stderr)
+                save_screenshot(driver, "punch_error.png")
+                sys.exit(1)
+            log_step("punch action (reset punch-out)", "END")
+            # Wait for page to settle then get fresh punch button
+            time.sleep(3)
+            try:
+                punch_button = navigate_to_attendance(driver)
+                punch_state = detect_punch_state(punch_button, driver)
+            except (TimeoutException, RuntimeError) as e:
+                print(f"ERROR: Could not get fresh punch state after reset: {e}", file=sys.stderr)
+                save_screenshot(driver, "punch_button_error.png")
+                sys.exit(1)
+
         if is_duplicate_action(punch_state, punch_action):
             print(f"WARNING: Already {punch_state}, skipping action", file=sys.stderr)
             sys.exit(0)

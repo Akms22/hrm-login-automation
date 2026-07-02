@@ -2,12 +2,8 @@ name: HRM Punch Automation
 
 on:
   schedule:
-    # Punch-IN: 2:00 AM UTC = 7:30 AM IST (Mon–Fri)
-    # HRM_PUNCH_MODE is hardcoded to 'in' — no auto-mode guessing
+    # Punch-IN only: 2:00 AM UTC = 7:30 AM IST (Mon–Fri)
     - cron: '0 2 * * 1-5'
-    # Punch-OUT: 10:30 AM UTC = 4:00 PM IST (Mon–Fri)
-    # HRM_PUNCH_MODE is hardcoded to 'out' — no auto-mode guessing
-    - cron: '30 10 * * 1-5'
   workflow_dispatch:
     inputs:
       mode:
@@ -43,27 +39,12 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Determine punch mode from cron schedule
-        id: punchmode
-        run: |
-          # If manually triggered, use the input
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "mode=${{ github.event.inputs.mode }}" >> $GITHUB_OUTPUT
-          else
-            # Determine mode from current UTC hour
-            HOUR=$(date -u +%H)
-            if [ "$HOUR" -lt 12 ]; then
-              echo "mode=in" >> $GITHUB_OUTPUT
-            else
-              echo "mode=out" >> $GITHUB_OUTPUT
-            fi
-          fi
-
       - name: Run punch automation
         env:
           HRM_USERNAME: ${{ secrets.HRM_USERNAME }}
           HRM_PASSWORD: ${{ secrets.HRM_PASSWORD }}
-          HRM_PUNCH_MODE: ${{ steps.punchmode.outputs.mode }}
+          # Scheduled runs always punch-in; manual runs use selected mode
+          HRM_PUNCH_MODE: ${{ github.event.inputs.mode || 'in' }}
         run: |
           echo "Running with mode: $HRM_PUNCH_MODE"
           python punch.py
