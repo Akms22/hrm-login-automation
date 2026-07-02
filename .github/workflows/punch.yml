@@ -2,8 +2,8 @@ name: HRM Punch Automation
 
 on:
   schedule:
-    # Punch-IN only: 2:00 AM UTC = 7:30 AM IST (Mon–Fri)
-    - cron: '0 2 * * 1-5'
+    # Punch-IN every day: 2:00 AM UTC = 7:30 AM IST (all 7 days)
+    - cron: '0 2 * * *'
   workflow_dispatch:
     inputs:
       mode:
